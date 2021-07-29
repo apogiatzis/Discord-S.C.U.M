@@ -30,7 +30,7 @@ import random
 
 #client initialization
 class Client:
-	def __init__(self, email="", password="", secret="", code="", token="", remote_auth=False, proxy_host=None, proxy_port=None, user_agent="random", locale="en-US", build_num="request", log={"console":True, "file":False}):
+	def __init__(self, email="", password="", secret="", code="", token="", remote_auth=False, proxy_host=None, proxy_port=None, user_agent="random", locale="en-US", build_num="request", blocking=False, log={"console":True, "file":False}):
 		#step 1: vars
 		self.log = log
 		self.locale = locale
@@ -93,7 +93,10 @@ class Client:
 				time.sleep(1)
 		self.s.headers.update({"Authorization": self.__user_token}) #update headers
 		#step 7: gateway (object initialization)
-		self.gateway = GatewayServer(self.websocketurl, self.__user_token, self.__super_properties, self.s, self.discord, self.log) #self.s contains proxy host and proxy port already
+		if blocking:
+			self.gateway = BlockingGatewayServer(self.websocketurl, self.__user_token, self.__super_properties, self.s, self.discord, self.log) #self.s contains proxy host and proxy port already
+		else:
+			self.gateway = GatewayServer(self.websocketurl, self.__user_token, self.__super_properties, self.s, self.discord, self.log) #self.s contains proxy host and proxy port already
 		#step 8: embed (object initialization)
 		self.Embedder = Embedder
 		#step 9: somewhat prepare for science events

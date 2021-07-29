@@ -558,3 +558,52 @@ class GatewayServer:
 		if self.session.userSettings['custom_status'] != None:
 			User(self.RESTurl,self.sessionobj,self.log).setCustomStatusHelper("", emoji=None, expires_at=None)
 		UserCombo(self).clearActivities()
+
+class BlockingGatewayServer:
+
+	def on_message(self, ws, message):
+		response = self.decompress(message)
+		if response['op'] != self.OPCODE.HEARTBEAT_ACK:
+			self.sequence += 1
+		resp = Resp(copy.deepcopy(response))
+		Logger.log('[gateway] < {}'.format(response), LogLevel.RECEIVE, self.log)
+		if response['op'] == self.OPCODE.HELLO: #only happens once, first message sent to client
+			self.interval = (response["d"]["heartbeat_interval"])/1000 #if this fails make an issue and I'll revert it back to the old method (slightly smaller wait time than heartbeat)
+			thread.start_new_thread(self._heartbeat, ())
+		elif response['op'] == self.OPCODE.HEARTBEAT_ACK:
+			if self._last_ack != None:
+				self.latency = time.perf_counter() - self._last_ack
+		elif response['op'] == self.OPCODE.HEARTBEAT:
+			self.send({"op": self.OPCODE.HEARTBEAT,"d": self.sequence})
+		elif response['op'] == self.OPCODE.INVALID_SESSION:
+			Logger.log("[gateway] Invalid session.", None, self.log)
+			self._last_err = InvalidSessionException("Invalid Session Error.")
+			if self.resumable:
+				self.resumable = False
+				self.sequence = 0
+				self.close()
+			else:
+				self.sequence = 0
+				self.close()
+		elif response['op'] == self.OPCODE.RECONNECT:
+			Logger.log("[gateway] Received opcode 7 (reconnect).", None, self.log)
+			self._last_err = NeedToReconnectException("Discord sent an opcode 7 (reconnect).")
+			self.close()
+		if self.interval == None:
+			Logger.log("[gateway] Identify failed.", None, self.log)
+			self.close()
+		if resp.event.ready:
+			self._last_err = None
+			self.session_id = response['d']['session_id']
+			self.settings_ready = resp.parsed.ready() #parsed
+			if not self.resetMembersOnSessionReconnect and self.session.read()[0]:
+				for guildID in self.settings_ready['guilds']:
+					self.settings_ready['guilds'][guildID]['members'] = self.session.guild(guildID).members
+			self.session = Session(self.settings_ready, {})
+		elif resp.event.ready_supplemental:
+			self.settings_ready_supp = resp.parsed.ready_supplemental() #parsed
+			self.session = Session(self.settings_ready, self.settings_ready_supp) #reinitialize i guess
+			self.READY = True
+		if self.updateSessionData:
+			self.sessionUpdates(resp)
+		self._response_loop(resp)
