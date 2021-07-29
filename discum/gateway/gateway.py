@@ -559,7 +559,7 @@ class GatewayServer:
 			User(self.RESTurl,self.sessionobj,self.log).setCustomStatusHelper("", emoji=None, expires_at=None)
 		UserCombo(self).clearActivities()
 
-class BlockingGatewayServer:
+class BlockingGatewayServer(GatewayServer):
 
 	def on_message(self, ws, message):
 		response = self.decompress(message)
